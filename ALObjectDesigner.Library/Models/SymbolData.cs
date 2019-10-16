@@ -7,7 +7,7 @@ namespace ALObjectDesigner.Library
     public class SymbolData
     {
         public string Path { get; set; }
-        public string Type { get; set; }
+        public ALObjectParser.ALObjectType Type { get; set; }
         public int Index { get; set; }
     }
 }

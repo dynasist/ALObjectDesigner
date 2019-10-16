@@ -9,12 +9,12 @@ namespace ALObjectDesigner.Library
     {
         public SymbolReference()
         {
-            Tables = new List<ALObject>();
-            Codeunits = new List<ALObject>();
-            Pages = new List<ALObject>();
-            PageCustomizations = new List<ALObject>();
-            PageExtensions = new List<ALObject>();
-            TableExtensions = new List<ALObject>();
+            Tables = new List<ALTable>();
+            Codeunits = new List<ALCodeunit>();
+            Pages = new List<ALPage>();
+            PageCustomizations = new List<ALPageCustomization>();
+            PageExtensions = new List<ALPageExtension>();
+            TableExtensions = new List<ALTableExtension>();
             Reports = new List<ALObject>();
             XmlPorts = new List<ALObject>();
             Queries = new List<ALObject>();
@@ -28,18 +28,19 @@ namespace ALObjectDesigner.Library
         public string Name { get; set; }
         public string Publisher { get; set; }
         public Version Version { get; set; }
-        public ICollection<ALObject> Tables { get; set; }
-        public ICollection<ALObject> Codeunits { get; set; }
-        public ICollection<ALObject> Pages { get; set; }
-        public ICollection<ALObject> PageExtensions { get; set; }
-        public ICollection<ALObject> PageCustomizations { get; set; }
-        public ICollection<ALObject> TableExtensions { get; set; }
-        public ICollection<ALObject> Reports { get; set; }
-        public ICollection<ALObject> XmlPorts { get; set; }
-        public ICollection<ALObject> Queries { get; set; }
-        public ICollection<ALObject> Profiles { get; set; }
-        public ICollection<ALObject> ControlAddIns { get; set; }
-        public ICollection<ALObject> EnumTypes { get; set; }
-        public ICollection<ALObject> DotNetPackages { get; set; }
+        public IEnumerable<ALTable> Tables { get; set; }
+        public IEnumerable<ALCodeunit> Codeunits { get; set; }
+        public IEnumerable<ALPage> Pages { get; set; }
+        public IEnumerable<ALPageExtension> PageExtensions { get; set; }
+        public IEnumerable<ALPageCustomization> PageCustomizations { get; set; }
+        public IEnumerable<ALTableExtension> TableExtensions { get; set; }
+        public IEnumerable<ALObject> Reports { get; set; }
+        public IEnumerable<ALObject> XmlPorts { get; set; }
+        public IEnumerable<ALObject> Queries { get; set; }
+        public IEnumerable<ALObject> Profiles { get; set; }
+        public IEnumerable<ALObject> ControlAddIns { get; set; }
+        public IEnumerable<ALObject> EnumTypes { get; set; }
+        public IEnumerable<ALObject> DotNetPackages { get; set; }
+        public string Path { get; set; }
     }
 }

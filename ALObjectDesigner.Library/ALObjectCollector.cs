@@ -15,8 +15,49 @@ namespace ALObjectDesigner.Library
     {
         public List<string> WorkspacePath { get; set; }
 
+        public string[] Types { 
+            get {
+                return new string[] {
+                    "Tables",
+                    "Pages",
+                    "Reports",
+                    "Codeunits",
+                    "Queries",
+                    "XmlPorts",
+                    "Profiles",
+                    "PageExtensions",
+                    "PageCustomizations",
+                    "TableExtensions",
+                    "ControlAddIns",
+                    "EnumTypes",
+                    "DotNetPackages"
+                };
+            } 
+            private set { } }
+
+        public Dictionary<ALObjectParser.ALObjectType, string> ALTypeMap { 
+            get {
+                var result = new Dictionary<ALObjectParser.ALObjectType, string>();
+                result.Add(ALObjectParser.ALObjectType.table, "Tables");
+                result.Add(ALObjectParser.ALObjectType.page, "Pages");
+                result.Add(ALObjectParser.ALObjectType.report, "Reports");
+                result.Add(ALObjectParser.ALObjectType.codeunit, "Codeunits");
+                result.Add(ALObjectParser.ALObjectType.query, "Queries");
+                result.Add(ALObjectParser.ALObjectType.xmlport, "XmlPorts");
+                result.Add(ALObjectParser.ALObjectType.profile, "Profiles");
+                result.Add(ALObjectParser.ALObjectType.pageextension, "PageExtensions");
+                result.Add(ALObjectParser.ALObjectType.pagecustomization, "PageCustomizations");
+                result.Add(ALObjectParser.ALObjectType.tableextension, "TableExtensions");
+                result.Add(ALObjectParser.ALObjectType.controladdin, "ControlAddIns");
+                result.Add(ALObjectParser.ALObjectType.@enum, "EnumTypes");
+                result.Add(ALObjectParser.ALObjectType.dotnet, "DotNetPackages");
+
+                return result;
+            } private set { } }
+
         public ALObjectCollector()
-        { }
+        {
+        }
 
         public ALObjectCollector(List<string> wkspcePaths)
         {
@@ -33,7 +74,7 @@ namespace ALObjectDesigner.Library
         public async Task<ICollection<CollectorItem>> Discover(List<string> wkspcePaths)
         {
             var result = new List<CollectorItem>();
-                
+
             var symbols = await DiscoverSymbols(wkspcePaths);
 
             if (symbols.Count() == 0)
@@ -41,8 +82,9 @@ namespace ALObjectDesigner.Library
                 return result;
             }
 
-            result = symbols
-                .SelectMany(s => {
+            var symbolRes = symbols
+                .SelectMany(s =>
+                {
                     List<dynamic> elems = new List<dynamic>();
                     elems.AddRange(s.Tables);
                     elems.AddRange(s.Pages);
@@ -72,19 +114,26 @@ namespace ALObjectDesigner.Library
                         CanExecute = (new string[] { "Table", "Page", "PageExtension", "TableExtension", "PageCustomization", "Report" }).Contains($"{item.Type}"),
                         CanDesign = (new string[] { "Table", "Page" }).Contains($"{item.Type}"),
                         CanCreatePage = (new string[] { "Table", "TableExtension" }).Contains($"{item.Type}"),
-                        EventName = "not_an_event"
-                    })
-                    .ToList();
+                        EventName = "not_an_event",
+                        IsEvent = false,
+                        SymbolData = new SymbolData
+                        {
+                            Index = item.Id,
+                            Path = s.Path,
+                            Type = item.Type
+                        }
+                    });
 
                     var events = elems
-                    .Where(w => 
+                    .Where(w =>
                         (w as ALObject)
                         .Methods
                         .SelectMany(a => a.Attributes)
                         .Where(at => at.Name.ToLower().Contains("event"))
                         .Any()
                     )
-                    .SelectMany(item => {
+                    .SelectMany(item =>
+                    {
                         var eventItem = (item as ALObject).Methods
                         .Where(ew => ew.Attributes.Where(at => at.Name.ToLower().Contains("event")).Any())
                         .Select(e =>
@@ -108,17 +157,23 @@ namespace ALObjectDesigner.Library
                         });
 
                         return eventItem;
-                    })
-                    .ToList();
+                    });
 
                     if (events != null)
-                        items.AddRange(events);
+                        items = items.Concat(events);
 
                     return items;
                 })
-                .ToList();
+                .AsQueryable();
 
-            return result;
+            var localSymbols = DiscoverLocalFiles(wkspcePaths);
+            symbolRes = symbolRes
+                .Distinct(new CollectorItemComparer())
+                .Except(localSymbols, new CollectorItemComparer());
+
+            symbolRes = symbolRes.Concat(localSymbols);
+
+            return symbolRes.ToList();
         }
 
         public async Task<ICollection<SymbolReference>> DiscoverSymbols(List<string> wkspcePaths)
@@ -130,11 +185,60 @@ namespace ALObjectDesigner.Library
                 return new List<SymbolReference>();
             }
 
-            var symbolTasks = symbolPaths.AsQueryable().Select(s => GetSymbolReference(s.FullName));
-
+            var symbolTasks = symbolPaths.AsQueryable().Select(s => GetSymbolReference(s.FullName)).AsQueryable();
             var result = await Task.WhenAll<SymbolReference>(symbolTasks);
-
+            
             return result;
+        }
+
+        public ICollection<CollectorItem> DiscoverLocalFiles(List<string> wkspcePaths)
+        {
+            var projects = ALProjectCollector.Discover(wkspcePaths);
+            var srcDirs = projects.Select(s => Directory.GetParent(s.FilePath).FullName).ToArray();
+            var result = new List<CollectorItem>().AsQueryable();
+
+            foreach (var project in projects)
+            {
+                var path = Directory.GetParent(project.FilePath).FullName;
+                var localSymbols = Directory
+                    .GetDirectories(path)
+                    .SelectMany(s => Directory.GetFiles(s, "*.al", SearchOption.AllDirectories))
+                    .Select(item =>
+                    {
+                        var parser = new ALObjectParser.Library.ALObjectParser(item);
+                        var alobject = parser.Read();
+
+                        var result = new CollectorItem
+                        {
+                            TypeId = alobject.Type,
+                            Id = alobject.Id,
+                            Type = $"{alobject.Type}",
+                            Publisher = project.publisher,
+                            //Version = project.version
+                            //Symbol = item,
+                            FsPath = item,
+                            Name = alobject.Name,
+                            Application = project.name,
+                            CanExecute = (new string[] { "Table", "Page", "PageExtension", "TableExtension", "PageCustomization", "Report" }).Contains($"{alobject.Type}"),
+                            CanDesign = (new string[] { "Table", "Page" }).Contains($"{alobject.Type}"),
+                            CanCreatePage = (new string[] { "Table", "TableExtension" }).Contains($"{alobject.Type}"),
+                            EventName = "not_an_event",
+                            IsEvent = false,
+                            SymbolData = new SymbolData
+                            {
+                                Index = alobject.Id,
+                                Path = item,
+                                Type = alobject.Type
+                            }
+                        };
+
+                        return result;
+                    });
+
+                result = result.Concat(localSymbols);
+            }
+
+            return result.ToList();
         }
 
         public List<FileInfo> GetSymbolPaths(List<string> wkspcePaths)
@@ -171,24 +275,45 @@ namespace ALObjectDesigner.Library
                 {
                     var contents = zipStream.ReadToEnd();
                     symbolRef = JsonConvert.DeserializeObject<SymbolReference>(contents);
-                    symbolRef.Tables = symbolRef.Tables.Select(x => { x.Type = ALObjectParser.ALObjectType.table; return x; }).ToList();
-                    symbolRef.TableExtensions = symbolRef.TableExtensions.Select(x => { x.Type = ALObjectParser.ALObjectType.tableextension; return x; }).ToList();
-                    symbolRef.Pages = symbolRef.Pages.Select(x => { x.Type = ALObjectParser.ALObjectType.page; return x; }).ToList();
-                    symbolRef.PageCustomizations = symbolRef.PageCustomizations.Select(x => { x.Type = ALObjectParser.ALObjectType.pagecustomization; return x; }).ToList();
-                    symbolRef.PageExtensions = symbolRef.PageExtensions.Select(x => { x.Type = ALObjectParser.ALObjectType.pageextension; return x; }).ToList();
-                    symbolRef.Reports = symbolRef.Reports.Select(x => { x.Type = ALObjectParser.ALObjectType.report; return x; }).ToList();
-                    symbolRef.Codeunits = symbolRef.Codeunits.Select(x => { x.Type = ALObjectParser.ALObjectType.codeunit; return x; }).ToList();
-                    symbolRef.XmlPorts = symbolRef.XmlPorts.Select(x => { x.Type = ALObjectParser.ALObjectType.xmlport; return x; }).ToList();
-                    symbolRef.Queries = symbolRef.Queries.Select(x => { x.Type = ALObjectParser.ALObjectType.query; return x; }).ToList();
-                    symbolRef.EnumTypes = symbolRef.EnumTypes.Select(x => { x.Type = ALObjectParser.ALObjectType.@enum; return x; }).ToList();
-                    symbolRef.ControlAddIns = symbolRef.ControlAddIns.Select(x => { x.Type = ALObjectParser.ALObjectType.controladdin; return x; }).ToList();
-                    symbolRef.DotNetPackages = symbolRef.DotNetPackages.Select(x => { x.Type = ALObjectParser.ALObjectType.dotnet; return x; }).ToList();
-                    symbolRef.Profiles = symbolRef.Profiles.Select(x => { x.Type = ALObjectParser.ALObjectType.profile; return x; }).ToList();
+
+                    symbolRef.Tables = symbolRef.Tables.Select(x => { x.Type = ALObjectParser.ALObjectType.table; return x; });
+                    symbolRef.TableExtensions = symbolRef.TableExtensions.Select(x => { x.Type = ALObjectParser.ALObjectType.tableextension; return x; });
+                    symbolRef.Pages = symbolRef.Pages.Select(x => { x.Type = ALObjectParser.ALObjectType.page; return x; });
+                    symbolRef.PageCustomizations = symbolRef.PageCustomizations.Select(x => { x.Type = ALObjectParser.ALObjectType.pagecustomization; return x; });
+                    symbolRef.PageExtensions = symbolRef.PageExtensions.Select(x => { x.Type = ALObjectParser.ALObjectType.pageextension; return x; });
+                    symbolRef.Reports = symbolRef.Reports.Select(x => { x.Type = ALObjectParser.ALObjectType.report; return x; });
+                    symbolRef.Codeunits = symbolRef.Codeunits.Select(x => { x.Type = ALObjectParser.ALObjectType.codeunit; return x; });
+                    symbolRef.XmlPorts = symbolRef.XmlPorts.Select(x => { x.Type = ALObjectParser.ALObjectType.xmlport; return x; });
+                    symbolRef.Queries = symbolRef.Queries.Select(x => { x.Type = ALObjectParser.ALObjectType.query; return x; });
+                    symbolRef.EnumTypes = symbolRef.EnumTypes.Select(x => { x.Type = ALObjectParser.ALObjectType.@enum; return x; });
+                    symbolRef.ControlAddIns = symbolRef.ControlAddIns.Select(x => { x.Type = ALObjectParser.ALObjectType.controladdin; return x; });
+                    symbolRef.DotNetPackages = symbolRef.DotNetPackages.Select(x => { x.Type = ALObjectParser.ALObjectType.dotnet; return x; });
+                    symbolRef.Profiles = symbolRef.Profiles.Select(x => { x.Type = ALObjectParser.ALObjectType.profile; return x; });
+
+                    symbolRef.Path = symbolPath;
                 }
             }
 
             return Task.FromResult(symbolRef);
         }
 
+        public async Task<IALObject> GetSymbolObject(SymbolData data)
+        {
+            FileInfo info = new FileInfo(data.Path);
+            if (info.Extension == "al")
+            {
+                var parser = new ALObjectParser.Library.ALObjectParser(data.Path);
+                var alobject = parser.Read();
+
+                return alobject;
+            }
+
+            var symbols = await GetSymbolReference(data.Path);
+            var packType = ALTypeMap[data.Type];
+
+            var objects = symbols.GetType().GetProperty(packType)?.GetValue(symbols) as IEnumerable<IALObject>;
+            var result = objects.Where(w => w.Id == data.Index).FirstOrDefault();
+            return result;
+        }
     }
 }
