@@ -19,15 +19,9 @@ namespace ALObjectDesigner.Library
             foreach (var path in wkspcePaths)
             {
                 var files = Directory
-                    .GetDirectories(path)
-                    .SelectMany(s => Directory.GetFiles(s, "app.json", SearchOption.AllDirectories))
-                    .Select(s => new FileInfo(s));
-
-                var baseFile = Directory
                     .GetFiles(path, "app.json", SearchOption.AllDirectories)
                     .Select(s => new FileInfo(s));
 
-                result.AddRange(baseFile);
                 result.AddRange(files);
             }
 

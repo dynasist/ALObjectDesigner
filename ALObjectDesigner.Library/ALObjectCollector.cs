@@ -203,36 +203,39 @@ namespace ALObjectDesigner.Library
                 var localSymbols = Directory
                     .GetDirectories(path)
                     .SelectMany(s => Directory.GetFiles(s, "*.al", SearchOption.AllDirectories))
-                    .Select(item =>
+                    .SelectMany(item =>
                     {
-                        var parser = new ALObjectParser.Library.ALObjectParser(item);
-                        var alobject = parser.Read();
-
-                        var result = new CollectorItem
+                        var collectorItems = new List<CollectorItem>();
+                        var alobjects = ALParser.Read(item);
+                        foreach (var alobject in alobjects)
                         {
-                            TypeId = alobject.Type,
-                            Id = alobject.Id,
-                            Type = $"{alobject.Type}",
-                            Publisher = project.publisher,
-                            //Version = project.version
-                            //Symbol = item,
-                            FsPath = item,
-                            Name = alobject.Name,
-                            Application = project.name,
-                            CanExecute = (new string[] { "Table", "Page", "PageExtension", "TableExtension", "PageCustomization", "Report" }).Contains($"{alobject.Type}"),
-                            CanDesign = (new string[] { "Table", "Page" }).Contains($"{alobject.Type}"),
-                            CanCreatePage = (new string[] { "Table", "TableExtension" }).Contains($"{alobject.Type}"),
-                            EventName = "not_an_event",
-                            IsEvent = false,
-                            SymbolData = new SymbolData
-                            {
-                                Index = alobject.Id,
-                                Path = item,
-                                Type = alobject.Type
-                            }
-                        };
 
-                        return result;
+                            collectorItems.Add(new CollectorItem
+                            {
+                                TypeId = alobject.Type,
+                                Id = alobject.Id,
+                                Type = $"{alobject.Type}",
+                                Publisher = project.publisher,
+                                //Version = project.version
+                                //Symbol = item,
+                                FsPath = item,
+                                Name = alobject.Name,
+                                Application = project.name,
+                                CanExecute = (new string[] { "Table", "Page", "PageExtension", "TableExtension", "PageCustomization", "Report" }).Contains($"{alobject.Type}"),
+                                CanDesign = (new string[] { "Table", "Page" }).Contains($"{alobject.Type}"),
+                                CanCreatePage = (new string[] { "Table", "TableExtension" }).Contains($"{alobject.Type}"),
+                                EventName = "not_an_event",
+                                IsEvent = false,
+                                SymbolData = new SymbolData
+                                {
+                                    Index = alobject.Id,
+                                    Path = item,
+                                    Type = alobject.Type
+                                }
+                            });
+                        }
+
+                        return collectorItems;
                     });
 
                 result = result.Concat(localSymbols);
@@ -300,10 +303,10 @@ namespace ALObjectDesigner.Library
         public async Task<IALObject> GetSymbolObject(SymbolData data)
         {
             FileInfo info = new FileInfo(data.Path);
-            if (info.Extension == "al")
+            if (info.Extension == ".al")
             {
-                var parser = new ALObjectParser.Library.ALObjectParser(data.Path);
-                var alobject = parser.Read();
+                var alobjects = ALParser.Read(data.Path);
+                var alobject = alobjects.FirstOrDefault(f => f.Type == data.Type && f.Id == data.Index);
 
                 return alobject;
             }
